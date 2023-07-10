@@ -4,18 +4,56 @@ interface CurrentGraphNodeNameRef {
 
 const nameFunction = (value: any) => value.replaceAll('-', '-<br>');
 
+class ColorManager {
+  private static pastelColors : string[] = ["#77DD77", "#836953", "#89cff0", "#99c5c4", "#9adedb", "#aa9499", "#aaf0d1", "#b2fba5", "#b39eb5", "#bdb0d0", "#bee7a5", "#befd73", "#c1c6fc", "#c6a4a4", "#cb99c9", "#ff6961", "#ff694f", "#ff9899", "#ffb7ce", "#ca9bf7"];
+  private usedColors : string[];
+
+  constructor() {
+    this.usedColors = [];
+  }
+
+  public getRandomColor(): string {
+    const availableColors = ColorManager.pastelColors.filter(color => !this.usedColors.includes(color));
+    if (availableColors.length === 0) {
+      throw new Error("There are not enough colors.");
+    }
+
+    const randomIndex = Math.floor(Math.random() * availableColors.length);
+    const randomColor = availableColors[randomIndex];
+    this.usedColors.push(randomColor);
+
+    return randomColor;
+  }
+
+  public resetColors() {
+    this.usedColors = [];
+  }
+
+}
+
+
 class SubTopology {
   public static pattern = /Sub-topology: ([0-9]*)/;
+  private static topologyPrefix = "topology";
 
   private static startFormatter(subTopology: string) {
-    return `subgraph Sub-Topology: ${subTopology}`;
+    return `subgraph ${this.topologyPrefix}${subTopology} [Sub-Topology: ${subTopology}]`;
   }
+
+  private static createClass(subTopology: string, colorManager: ColorManager, classDefList:string[], classList:string[]) {
+    const color = colorManager.getRandomColor();
+    const classId = `${this.topologyPrefix}${subTopology}`
+    classList.push(`class ${classId} fill_${classId}`)
+    classDefList.push(`classDef fill_${classId} fill:${color}`)
+  }
+
+
 
   public static endFormatter() {
     return `end`;
   };
 
-  public static visit(line: string, subTopologies: string[], subTopologiesList: string[]): void {
+  public static visit(line: string, subTopologies: string[], subTopologiesList: string[], colorManager: ColorManager, classDefList: string[], classList: string[]): void {
     let match = line.match(this.pattern);
     // Close the previous sub-topology before opening a new one;
     if (subTopologies.length) {
@@ -24,6 +62,7 @@ class SubTopology {
     if (match) {
       subTopologies.push(this.startFormatter(match[1]));
       subTopologiesList.push(match[1]);
+      this.createClass(match[1], colorManager, classDefList, classList)
     }
   }
 }
@@ -116,12 +155,15 @@ export class AsciiToMermaid {
     let topicSourcesList: string[] = [];
     let topicSinksList: string[] = [];
     let stateStoresList: string[] = [];
+    let classDefList : string[] = [];
+    let classList: string[] = [];
+    let colorManager : ColorManager = new ColorManager();
 
 
     for (const line of lines) {
       switch (true) {
         case SubTopology.pattern.test(line):
-          SubTopology.visit(line, subTopologies, subTopologiesList);
+          SubTopology.visit(line, subTopologies, subTopologiesList, colorManager, classDefList, classList);
           break;
         case Source.pattern.test(line):
           Source.visit(line, outside, topicSourcesList, currentGraphNodeName);
@@ -144,8 +186,9 @@ export class AsciiToMermaid {
     if (subTopologies.length) {
       subTopologies.push(SubTopology.endFormatter());
     }
-
-    return ['graph TD'].concat(outside).concat(subTopologies).concat(topicSourcesList).concat(topicSinksList).concat(stateStoresList).join('\n');
+    let data = ['graph TD'].concat(outside).concat(subTopologies).concat(topicSourcesList).concat(topicSinksList).concat(stateStoresList).concat(classList).concat(classDefList).join('\n');
+    console.log(data);
+    return data;
   }
 
 }
